@@ -87,7 +87,7 @@ def update_building_page(page_id, building_data):
         return False
 
 def main():
-    """메인 실행 함수 - 데이터베이스 첫 번째 페이지 처리"""
+    """메인 실행 함수 - 올바른 데이터베이스 쿼리"""
     page_url = os.getenv("PAGE_URL", "")
     if not page_url:
         print("❌ PAGE_URL 환경변수 필요")
@@ -101,15 +101,18 @@ def main():
     
     print(f"🔄 데이터베이스 ID: {database_id}")
     
-    # 데이터베이스에서 첫 번째 페이지 가져오기
+    # 데이터베이스 쿼리 (올바른 문법)
     try:
-        results = notion.databases.query(database_id=database_id)
-        if not results['results']:
+        database_results = notion.databases.query(
+            database_id=database_id
+        )
+        
+        if not database_results['results']:
             print("❌ 데이터베이스에 페이지 없음")
             return 1
         
-        first_page = results['results'][0]
-        page_id = first_page['id'].replace('%', '')  # ID 정리
+        first_page = database_results['results'][0]
+        page_id = first_page['id'].replace('%', '')
         print(f"📄 첫 번째 페이지 ID: {page_id}")
         
         # 페이지에서 주소 가져오기
@@ -118,11 +121,11 @@ def main():
         
         if address_prop.get('title') and address_prop['title']:
             address = address_prop['title'][0]['text']['content']
+            print(f"📍 주소: {address}")
         else:
             print("❌ '주소' 속성에 데이터 없음")
             return 1
             
-        print(f"📍 주소: {address}")
     except Exception as e:
         print(f"❌ 데이터베이스 읽기 실패: {e}")
         return 1
