@@ -4,7 +4,7 @@ import json
 print("🔄 법정동 CSV → Python 딕셔너리 자동 변환")
 
 # 1. CSV 다운로드 후 업로드
-df = pd.read_csv('국토교통부_전국_법정동.csv', encoding='cp949')
+df = pd.read_csv('국토교통부_전국 법정동_20250807.csv', encoding='cp949')
 
 # 2. 시군구명 → 법정동코드 딕셔너리 생성
 bjd_dict = {}
