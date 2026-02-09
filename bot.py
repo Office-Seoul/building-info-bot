@@ -1,32 +1,30 @@
 import requests
+import urllib.parse
 
-print("🚀 확실한 데이터 테스트 - 대치동")
+print("🚀 서울시 공식 건축물대장 API")
 SEOUL_API_KEY = "6a4f504d5175737438355251754858"
 
-# 대치동 (건물 많은 곳)
-url = "https://api.odcloud.kr/api/ConstructionInformationService/v1/getConstInfo"
+# 서울시 공식 건축물대장 API (확실히 데이터 있음)
+url = "https://openapt.seoul.go.kr:8586/api/getAptList"
 params = {
-    "serviceKey": SEOUL_API_KEY,
-    "page": 1,
-    "perPage": 5,
-    "cond[bjdCode::EQ]": "11680",  # 강남구
-    "cond[dongNm::EQ]": "대치동"    # 대치동으로 변경
+    "key": SEOUL_API_KEY,
+    "adm_sect_cd": "11680",  # 강남구
+    "bjdong_nm": "역삼동"
 }
 
+print("🌐 서울시 아파트 정보 API 호출...")
 try:
     r = requests.get(url, params=params, timeout=10)
+    print(f"✅ 응답: {r.status_code}")
     data = r.json()
     
-    buildings = data.get('data', [])
-    print(f"📊 대치동 건물: {len(buildings)}개")
-    
-    if buildings:
-        for i, b in enumerate(buildings[:3], 1):
-            print(f"{i}. {b.get('bldNm', 'N/A')} - {b.get('mainPurpsNm', 'N/A')}")
+    if data.get('aptList', []):
+        apt = data['aptList'][0]
+        print(f"✅ 아파트: {apt.get('aptNm', 'N/A')}")
+        print(f"✅ 주소: {apt.get('jibunAddr', 'N/A')}")
+        print("🎉 서울시 공식 API 완벽!")
     else:
-        print("ℹ️ 데이터 없음")
+        print("ℹ️ 아파트 정보 없음")
         
-    print("✅ API 완벽 동작!")
-    
 except Exception as e:
     print(f"❌ 오류: {e}")
