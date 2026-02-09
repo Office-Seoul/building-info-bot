@@ -1,0 +1,20 @@
+name: 🏢 건축물대장 업데이트
+on:
+  workflow_dispatch:
+    inputs:
+      page_url:
+        description: '빌딩정보 페이지 URL'
+        required: true
+jobs:
+  update-building:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    - name: 설치
+      run: pip install notion-client requests
+    - name: 실행
+      env:
+        NOTION_TOKEN: ${{
