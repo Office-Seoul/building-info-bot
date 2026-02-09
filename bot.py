@@ -1,49 +1,55 @@
 import os
 import requests
+import re
+import urllib.parse
 from datetime import datetime
 
-print("🚀 서울시 건축물대장 봇 시작!")
+print("🚀 서울시 건축물대장 봇 - 공식 API")
 SEOUL_API_KEY = os.getenv("SEOUL_API_KEY")
 print(f"✅ SEOUL_API_KEY 확인됨")
 
-# 하드코딩 테스트 주소 (실제 Notion 주소 대신)
-TEST_ADDRESS = "서울 강남구 역삼동"
+# 테스트 주소
+TEST_ADDRESS = "서울특별시 강남구 역삼동"
 print(f"📍 테스트 주소: {TEST_ADDRESS}")
 
-# 동 이름 추출 (더 강력한 정규식)
-import re
-dong_match = re.search(r'([가-힣]+구[가-힣\s]*동)', TEST_ADDRESS)
-if not dong_match:
-    print("❌ 주소에서 동 파싱 실패")
+# 1. 법정동 코드 찾기 (강남구=11680)
+gu_codes = {
+    "강남구": "11680", "송파구": "11650", "마포구": "11440"
+}
+
+gu_match = re.search(r'([가-힣]+구)', TEST_ADDRESS)
+if not gu_match:
+    print("❌ 구 이름 파싱 실패")
     exit(1)
 
-dong = dong_match.group(1).strip()
-print(f"🔍 검색 동: {dong}")
+gu = gu_match.group(1)
+bjd_code = gu_codes.get(gu, "11680")  # 기본값 강남구
+dong = "역삼동"
 
-# 서울시 API 호출
-url = f"https://api.seoul.go.kr:8088/openapi/buildingInfo/json/{SEOUL_API_KEY}/1/5/11680/{dong}"
-print(f"🌐 API 호출: {url}")
+print(f"🔍 구: {gu}, 법정동코드: {bjd_code}, 동: {dong}")
+
+# 2. 공공데이터포털 표준 REST API (HTTPS 443포트)
+url = f"https://api.odcloud.kr/api/ConstructionInformationService/v1/getConstInfo?page=1&perPage=10&cond[bjdCode::EQ]={bjd_code}&cond[dongNm::EQ]={urllib.parse.quote(dong)}&serviceKey={SEOUL_API_KEY}"
+
+print(f"🌐 공식 API 호출: {url}")
 
 try:
-    response = requests.get(url, timeout=15)
+    response = requests.get(url, timeout=20)
     response.raise_for_status()
     data = response.json()
     
-    buildings = data.get('buildingInfo', [])
-    print(f"📊 건물 수: {len(buildings)}")
+    print(f"✅ 응답: {data.get('totalCount', 0)}건")
     
-    if buildings:
-        building = buildings[0]
-        print(f"✅ 건물명: {building.get('bdNm', '알수없음')}")
+    if data.get('data'):
+        building = data['data'][0]
+        print(f"✅ 건물명: {building.get('bldNm', '알수없음')}")
         print(f"✅ 주용도: {building.get('mainPurpsNm', '알수없음')}")
-        print(f"✅ 연면적: {building.get('totArea', '0')}㎡")
-        print(f"✅ 층수: {building.get('totFlrCnt', '0')}층")
-        print("🎉 서울시 API 완벽 동작!")
+        print("🎉 공공데이터포털 API 완벽 동작!")
     else:
-        print("ℹ️ 해당 동에 등록된 건물 없음")
+        print("ℹ️ 건물 정보 없음")
         
 except Exception as e:
     print(f"❌ API 오류: {e}")
     exit(1)
 
-print("✅ 테스트 완료!")
+print("✅ 최종 테스트 완료!")
