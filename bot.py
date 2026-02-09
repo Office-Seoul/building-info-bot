@@ -3,7 +3,6 @@ import re
 from notion_client import Client
 import os
 from datetime import datetime
-from urllib.parse import urlparse, parse_qs
 
 # GitHub Secrets에서 자동 로드
 NOTION_TOKEN = os.getenv("NOTION_TOKEN")
@@ -11,14 +10,14 @@ SEOUL_API_KEY = os.getenv("SEOUL_API_KEY")
 
 notion = Client(auth=NOTION_TOKEN)
 
-def get_building_id_from_url(notion_url):
-    """노션 URL에서 페이지 ID 추출 (개선됨)"""
-    # 방법1: 32자리 ID 직접 추출 (https://www.notion.so/abc123... 형식)
+def get_database_id_from_url(notion_url):
+    """노션 URL에서 데이터베이스 ID 추출"""
+    # 32자리 ID 직접 추출
     match = re.search(r'notion\.so/([a-z0-9]{32})', notion_url)
     if match:
         return match.group(1)
     
-    # 방법2: ?p= 파라미터
+    # ?p= 파라미터
     match = re.search(r'p=([a-zA-Z0-9-]+)', notion_url)
     if match:
         return match.group(1).replace('-', '')
@@ -28,14 +27,11 @@ def get_building_id_from_url(notion_url):
 
 def fetch_seoul_building(address):
     """서울시 건축물대장 API 호출"""
-    # 주소에서 동 이름 파싱 (예: "서울 강남구 역삼동")
     dong_match = re.search(r'([가-힣]+구.*?동)', address)
     if not dong_match:
         return {"status": "error", "message": "동 이름 파싱 실패"}
     
     dong = dong_match.group(1)
-    
-    # 서울시 건축물대장 API (11680=강남구 예시)
     url = f"https://api.seoul.go.kr:8088/openapi/buildingInfo/json/{SEOUL_API_KEY}/1/5/11680/{dong}"
     
     try:
@@ -66,40 +62,20 @@ def fetch_seoul_building(address):
 def update_building_page(page_id, building_data):
     """노션 페이지 업데이트"""
     properties = {
-        "api_상태": {
-            "select": {"name": building_data.get("status", "error")}
-        },
-        "업데이트일": {
-            "date": {"start": datetime.now().strftime("%Y-%m-%dT%H:%M:%S")}
-        }
+        "api_상태": {"select": {"name": building_data.get("status", "error")}},
+        "업데이트일": {"date": {"start": datetime.now().strftime("%Y-%m-%dT%H:%M:%S")}}
     }
     
     if building_data.get("status") == "success":
         properties.update({
-            "건물명": {
-                "title": [{"text": {"content": building_data.get("건물명", "알수없음")}}]
-            },
-            "주용도": {
-                "select": {"name": building_data.get("주용도", "알수없음")}
-            },
-            "연면적_㎡": {
-                "number": building_data.get("연면적", 0)
-            },
-            "지상층수": {
-                "number": building_data.get("지상층수", 0)
-            },
-            "지하층수": {
-                "number": building_data.get("지하층수", 0)
-            },
-            "승강기수": {
-                "number": building_data.get("승강기수", 0)
-            },
-            "준공일자": {
-                "date": {"start": building_data.get("준공일자", "")}
-            },
-            "전체구조": {
-                "rich_text": [{"text": {"content": building_data.get("구조", "알수없음")}}]
-            }
+            "건물명": {"title": [{"text": {"content": building_data.get("건물명", "알수없음")}}]},
+            "주용도": {"select": {"name": building_data.get("주용도", "알수없음")}},
+            "연면적_㎡": {"number": building_data.get("연면적", 0)},
+            "지상층수": {"number": building_data.get("지상층수", 0)},
+            "지하층수": {"number": building_data.get("지하층수", 0)},
+            "승강기수": {"number": building_data.get("승강기수", 0)},
+            "준공일자": {"date": {"start": building_data.get("준공일자", "")}},
+            "전체구조": {"rich_text": [{"text": {"content": building_data.get("구조", "알수없음")}}]}
         })
     
     try:
@@ -111,22 +87,32 @@ def update_building_page(page_id, building_data):
         return False
 
 def main():
-    """메인 실행 함수"""
+    """메인 실행 함수 - 데이터베이스 첫 번째 페이지 처리"""
     page_url = os.getenv("PAGE_URL", "")
     if not page_url:
         print("❌ PAGE_URL 환경변수 필요")
         return 1
     
-    page_id = get_building_id_from_url(page_url)
-    if not page_id:
-        print("❌ 유효하지 않은 노션 페이지 URL")
+    # 데이터베이스 ID 추출
+    database_id = get_database_id_from_url(page_url)
+    if not database_id:
+        print("❌ 유효하지 않은 노션 URL")
         return 1
     
-    print(f"🔄 처리중: {page_url}")
-    print(f"📄 페이지 ID: {page_id}")
+    print(f"🔄 데이터베이스 ID: {database_id}")
     
-    # 노션 페이지에서 주소 가져오기
+    # 데이터베이스에서 첫 번째 페이지 가져오기
     try:
+        results = notion.databases.query(database_id=database_id)
+        if not results['results']:
+            print("❌ 데이터베이스에 페이지 없음")
+            return 1
+        
+        first_page = results['results'][0]
+        page_id = first_page['id'].replace('%', '')  # ID 정리
+        print(f"📄 첫 번째 페이지 ID: {page_id}")
+        
+        # 페이지에서 주소 가져오기
         page = notion.pages.retrieve(page_id)
         address_prop = page['properties'].get('주소', {})
         
@@ -138,7 +124,7 @@ def main():
             
         print(f"📍 주소: {address}")
     except Exception as e:
-        print(f"❌ 노션 페이지 읽기 실패: {e}")
+        print(f"❌ 데이터베이스 읽기 실패: {e}")
         return 1
     
     # 서울시 API 호출
