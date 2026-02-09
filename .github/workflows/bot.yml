@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       page_url:
-        description: '빌딩정보 페이지 URL (주소가 있는 페이지)'
+        description: '빌딩정보 페이지 URL'
         required: true
         type: string
 
@@ -11,7 +11,8 @@ jobs:
   fetch-building:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
     
     - name: Setup Python
       uses: actions/setup-python@v4
