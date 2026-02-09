@@ -1,0 +1,18 @@
+name: 🔄 법정동코드 CSV 변환
+on: [workflow_dispatch]
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: 설치
+      run: pip install pandas
+    - name: CSV → Python 딕셔너리 변환
+      run: python convert_bjd_csv.py
+    - name: 변환된 코드 커밋
+      run: |
+        git config user.name "github-actions"
+        git config user.email "action@github.com"
+        git add korea_bjd_codes.py
+        git commit -m "feat: 법정동코드 자동 변환"
+        git push
