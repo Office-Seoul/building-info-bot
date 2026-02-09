@@ -12,9 +12,19 @@ SEOUL_API_KEY = os.getenv("SEOUL_API_KEY")
 notion = Client(auth=NOTION_TOKEN)
 
 def get_building_id_from_url(notion_url):
-    """노션 URL에서 페이지 ID 추출"""
+    """노션 URL에서 페이지 ID 추출 (개선됨)"""
+    # 방법1: 32자리 ID 직접 추출 (https://www.notion.so/abc123... 형식)
+    match = re.search(r'notion\.so/([a-z0-9]{32})', notion_url)
+    if match:
+        return match.group(1)
+    
+    # 방법2: ?p= 파라미터
     match = re.search(r'p=([a-zA-Z0-9-]+)', notion_url)
-    return match.group(1).replace('-', '') if match else None
+    if match:
+        return match.group(1).replace('-', '')
+    
+    print(f"❌ URL 파싱 실패: {notion_url}")
+    return None
 
 def fetch_seoul_building(address):
     """서울시 건축물대장 API 호출"""
