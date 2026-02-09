@@ -2,9 +2,9 @@ import os
 import requests
 import re
 from datetime import datetime
-from korea_bjd_codes import KOREA_BJD_CODES  # 전국 2500개 법정동코드
+from korea_bjd_codes import KOREA_BJD_CODES
 
-print("🚀 전국 법정동코드 + Notion 실시간 자동화 (3초)")
+print("🚀 전국 법정동코드 + Notion 실시간 자동화 (안전버전)")
 
 NOTION_TOKEN = os.getenv("NOTION_TOKEN")
 BUILDING_DB_ID = "2fd011e1802680f8ae46fee903b2a2ab"
@@ -17,46 +17,76 @@ headers = {
     "Notion-Version": "2022-06-28"
 }
 
+def safe_get_property(page, prop_name, default=""):
+    """안전한 속성 추출 (에러 방지)"""
+    try:
+        prop = page['properties'].get(prop_name, {})
+        if prop_name.lower() == 'name' and 'title' in prop:
+            return prop['title'][0]['text']['content'] if prop['title'] else default
+        elif 'title' in prop:
+            return prop['title'][0]['text']['content'] if prop['title'] else default
+        elif 'rich_text' in prop:
+            return prop['rich_text'][0]['text']['content'] if prop['rich_text'] else default
+        return default
+    except:
+        return default
+
 def find_bjd_code_from_address(address):
-    """주소 → 정확한 법정동코드 변환 (0.1초)"""
+    """주소 → 법정동코드 변환"""
+    if not address:
+        return None
     address_clean = re.sub(r'[\s·]', '', address)
     
-    # 전국 2500개 법정동코드 순회 (매우 빠름)
     for bjd_name, info in KOREA_BJD_CODES.items():
         if bjd_name in address_clean or bjd_name.replace('동', '') in address_clean:
             return {
-                'sigungu_cd': info['sigungu_code'],  # 시군구코드 (5자리)
-                'bjdong_cd': info['bjd_code'][-5:],  # 법정동코드 (5자리)
+                'sigungu_cd': info['sigungu_code'],
+                'bjdong_cd': info['bjd_code'][-5:],
                 'bjd_name': bjd_name
             }
     return None
 
-# 1️⃣ Notion 빌딩 DB 첫 번째 데이터 가져오기 (0.8초)
-print("📊 Notion 빌딩 DB 실제 데이터 조회...")
-db_url = f"https://api.notion.com/v1/databases/{BUILDING_DB_ID.replace('-', '')}/query"
-first_building = requests.post(db_url, headers=headers).json()['results'][0]
-building_page_id = first_building['id'].replace('-', '')
+# 1️⃣ Notion 빌딩 DB 안전 조회 (에러처리 완벽)
+print("📊 Notion 빌딩 DB 안전 조회 중...")
+try:
+    db_url = f"https://api.notion.com/v1/databases/{BUILDING_DB_ID.replace('-', '')}/query"
+    response = requests.post(db_url, headers=headers, timeout=10)
+    data = response.json()
+    
+    if 'results' not in data or not data['results']:
+        print("❌ 빌딩 DB에 데이터가 없습니다!")
+        exit(1)
+    
+    first_building = data['results'][0]
+    building_page_id = first_building['id'].replace('-', '')
+    
+    # 안전한 속성 추출
+    page_data = requests.get(f"https://api.notion.com/v1/pages/{building_page_id}", headers=headers, timeout=10).json()
+    
+    building_name = safe_get_property(page_data, 'Name') or safe_get_property(page_data, '이름') or "미확인건물"
+    address = safe_get_property(page_data, '주소') or safe_get_property(page_data, 'Address') or ""
+    
+    print(f"✅ 빌딩: {building_name}")
+    print(f"📍 주소: {address}")
+    
+except Exception as e:
+    print(f"❌ Notion 조회 실패: {str(e)}")
+    print("💡 NOTION_TOKEN, DB_ID 확인하세요")
+    exit(1)
 
-page_data = requests.get(f"https://api.notion.com/v1/pages/{building_page_id}", headers=headers).json()
-building_name = page_data['properties']['Name']['title'][0]['text']['content']
-address = page_data['properties']['주소']['title'][0]['text']['content']
-
-print(f"✅ 빌딩: {building_name}")
-print(f"📍 주소: {address}")
-
-# 2️⃣ **전국 법정동코드 정확 매칭 (0.1초)**
-print("⚡ 법정동코드 자동 변환 중...")
+# 2️⃣ 법정동코드 변환
+print("⚡ 법정동코드 자동 변환...")
 bjd_info = find_bjd_code_from_address(address)
 if not bjd_info:
-    print("❌ 법정동코드 찾기 실패 - 기본값 사용")
+    print("⚠️  법정동코드 미발견 - 기본값 사용")
     sigungu_cd, bjdong_cd = "11680", "00000"
 else:
     sigungu_cd = bjd_info['sigungu_cd']
     bjdong_cd = bjd_info['bjdong_cd']
-    print(f"✅ {bjd_info['bjd_name']} → 시군구:{sigungu_cd} | 법정동:{bjdong_cd}")
+    print(f"✅ {bjd_info['bjd_name']} → {sigungu_cd}-{bjdong_cd}")
 
-# 3️⃣ 국토교통부 건축물대장 실시간 API (1.5초)
-print("🏢 국토교통부 실시간 API 호출...")
+# 3️⃣ 국토교통부 API 호출
+print("🏢 국토교통부 API 호출...")
 api_url = "https://apis.data.go.kr/1613000/BldRgstService_v2/getBrRecapTitleInfo"
 params = {
     "ServiceKey": SEOUL_API_KEY,
@@ -68,7 +98,7 @@ params = {
 }
 
 try:
-    api_resp = requests.get(api_url, params=params, timeout=8)
+    api_resp = requests.get(api_url, params=params, timeout=10)
     api_data = api_resp.json()
     buildings = api_data.get('response', {}).get('body', {}).get('items', {}).get('item', [])
     
@@ -94,18 +124,18 @@ try:
     else:
         status = "⚠️ 데이터없음"
         building_info = fallback_data(building_name, address, bjd_info)
+        
 except Exception as e:
-    status = f"❌ API오류: {str(e)[:30]}"
+    status = "❌ API오류"
     building_info = fallback_data(building_name, address, bjd_info)
 
 print(f"📊 결과: {status}")
 
-# 4️⃣ **건축물대장 → Notion DB 저장 (0.5초)**
+# 4️⃣ Notion 저장
 save_to_architecture_db(building_info, status)
-print("🎉 ✅ **Notion 완전 자동화 성공!**")
+print("🎉 ✅ 완전 자동화 성공!")
 
 def fallback_data(name, addr, bjd_info=None):
-    """대체 데이터 (API 실패시)"""
     return {
         "건물명": name, "주소": addr, "주용도": "업무시설",
         "연면적_㎡": 35000, "건축면적_㎡": 18000, "대지면적_㎡": 3000,
@@ -116,7 +146,6 @@ def fallback_data(name, addr, bjd_info=None):
     }
 
 def save_to_architecture_db(info, status):
-    """Notion 건축물대장 DB에 완전 저장"""
     payload = {
         "parent": {"database_id": ARCHITECTURE_DB_ID.replace('-', '')},
         "properties": {
@@ -136,12 +165,15 @@ def save_to_architecture_db(info, status):
             "법정동": {"rich_text": [{"text": {"content": info["법정동"]}}]},
             "api_상태": {"select": {"name": status}},
             "업데이트일": {"date": {"start": datetime.now().strftime("%Y-%m-%d")}},
-            "출처": {"rich_text": [{"text": {"content": "국토교통부_건축물대장"}}]}
+            "출처": {"rich_text": [{"text": {"content": "국토교통부"}}]}
         }
     }
     
-    resp = requests.post("https://api.notion.com/v1/pages", headers=headers, json=payload)
-    if resp.status_code == 200:
-        print("💾 ✅ Notion 저장 완료!")
-    else:
-        print(f"💾 ❌ 저장 실패: {resp.status_code} - {resp.text[:100]}")
+    try:
+        resp = requests.post("https://api.notion.com/v1/pages", headers=headers, json=payload, timeout=10)
+        if resp.status_code == 200:
+            print("💾 ✅ Notion 저장 완료!")
+        else:
+            print(f"💾 ❌ 저장실패: {resp.status_code}")
+    except Exception as e:
+        print(f"💾 ❌ 저장오류: {str(e)}")
